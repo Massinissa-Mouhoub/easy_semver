@@ -3,7 +3,7 @@ description: >-
   Bump and sync a Flutter app's semantic version across pubspec.yaml, the iOS
   Xcode project and Android Gradle files, and repair drift between them.
 version: 1.0.0
-repository: https://github.com/Narek33777/easy_semver
+repository: https://github.com/Massinissa-Mouhoub/easy_semver
 
 topics:
   - flutter
