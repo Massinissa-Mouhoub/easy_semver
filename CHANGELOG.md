@@ -1,5 +1,12 @@
 ## Unreleased
 
+- `--tag` (`-t`) puts an annotated Git tag on the bump commit, named after the
+  new version. To name it yourself the value must be attached — `--tag=NAME` or
+  `-tNAME` — because the value is optional and a detached name could not be
+  told apart from the bump type; that case is a usage error with a hint.
+  `--tag` implies `--commit`. With `--dry-run` no tag is created, outside a
+  repository it warns, and when the version is already current there is nothing
+  to commit so the tag goes on `HEAD`.
 - `--commit` (`-c`) commits the updated files when the project is a Git
   repository. Only the files bumpv wrote go into the commit, as
   `chore: bump version to X.Y.Z`, so unrelated work in progress is left alone.
