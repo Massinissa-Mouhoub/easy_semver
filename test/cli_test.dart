@@ -178,6 +178,106 @@ void main() {
     });
   });
 
+  group('--commit', () {
+    /// Turns [root] into a repository with one commit, so the bump has a HEAD
+    /// to commit against. Identity is set locally to keep the test independent
+    /// of the machine's global Git config.
+    void initRepo(Directory root) {
+      for (final args in const [
+        ['init', '--quiet'],
+        ['config', 'user.name', 'bumpv test'],
+        ['config', 'user.email', 'bumpv@example.com'],
+        ['config', 'commit.gpgsign', 'false'],
+        ['add', '.'],
+        ['commit', '--quiet', '-m', 'initial'],
+      ]) {
+        final result =
+            Process.runSync('git', args, workingDirectory: root.path);
+        expect(
+          result.exitCode,
+          0,
+          reason: 'git ${args.first}: ${result.stderr}',
+        );
+      }
+    }
+
+    String gitOutput(Directory root, List<String> args) =>
+        (Process.runSync('git', args, workingDirectory: root.path).stdout
+                as String)
+            .trim();
+
+    test('commits the updated files', () {
+      final root = makeProject();
+      initRepo(root);
+
+      expect(run(['minor', '--commit', '--project', root.path]), 0);
+
+      expect(
+        gitOutput(root, ['log', '-1', '--pretty=%s']),
+        'chore: bump version to 1.3.0',
+      );
+      expect(gitOutput(root, ['status', '--porcelain']), isEmpty);
+      expect(
+        gitOutput(root, ['show', '--name-only', '--pretty=', 'HEAD']),
+        allOf(contains('pubspec.yaml'), contains('project.pbxproj')),
+      );
+    });
+
+    test('-c is the short form', () {
+      final root = makeProject();
+      initRepo(root);
+
+      expect(run(['patch', '-c', '--project', root.path]), 0);
+      expect(
+        gitOutput(root, ['log', '-1', '--pretty=%s']),
+        'chore: bump version to 1.2.2',
+      );
+    });
+
+    test('leaves unrelated changes out of the commit', () {
+      final root = makeProject();
+      initRepo(root);
+      File('${root.path}/README.md').writeAsStringSync('work in progress\n');
+
+      expect(run(['minor', '--commit', '--project', root.path]), 0);
+
+      expect(
+        gitOutput(root, ['show', '--name-only', '--pretty=', 'HEAD']),
+        isNot(contains('README.md')),
+      );
+      expect(gitOutput(root, ['status', '--porcelain']), contains('README.md'));
+    });
+
+    test('warns but still succeeds outside a repository', () {
+      final root = makeProject();
+
+      expect(run(['minor', '--commit', '--project', root.path]), 0);
+      expect(pubspecOf(root), contains('version: 1.3.0+1'));
+    });
+
+    test('with --dry-run writes nothing and commits nothing', () {
+      final root = makeProject();
+      initRepo(root);
+
+      expect(
+        run(['major', '--commit', '--dry-run', '--project', root.path]),
+        0,
+      );
+
+      expect(pubspecOf(root), contains('version: 1.2.1+1'));
+      expect(gitOutput(root, ['log', '-1', '--pretty=%s']), 'initial');
+    });
+
+    test('does not commit when nothing needed writing', () {
+      final root = makeProject();
+      expect(run(['minor', '--project', root.path]), 0);
+      initRepo(root);
+
+      expect(run(['1.3.0', '--commit', '--project', root.path]), 0);
+      expect(gitOutput(root, ['log', '-1', '--pretty=%s']), 'initial');
+    });
+  });
+
   test('finds the project root from a nested working directory', () {
     final root = makeProject();
     final nested = Directory('${root.path}/lib/features')

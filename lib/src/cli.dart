@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:args/args.dart';
 
 import 'change.dart';
+import 'git.dart';
 import 'project.dart';
 import 'updaters/gradle_updater.dart';
 import 'updaters/pubspec_updater.dart';
@@ -40,6 +41,12 @@ ArgParser buildParser() => ArgParser()
     help: 'Increment the build number (use for store uploads).',
   )
   ..addFlag(
+    'commit',
+    abbr: 'c',
+    negatable: false,
+    help: 'Commit the updated files when the project is a Git repository.',
+  )
+  ..addFlag(
     'dry-run',
     negatable: false,
     help: 'Print what would change without writing anything.',
@@ -66,9 +73,13 @@ Examples:
   bumpv 2.4.0                 set the version exactly
   bumpv 2.4.0+7               set version and build number
   bumpv minor --bump-build    bump both, for a store upload
+  bumpv patch --commit        bump, then commit the files that changed
 
 The build number is preserved unless --build or --bump-build is given. App
 stores reject a repeated build number, so use --bump-build for a release.
+
+--commit stages only the files bumpv wrote and commits them as
+"chore: bump version to X.Y.Z", leaving any other work in progress alone.
 
 Running with the current version re-syncs iOS and Android without changing the
 version — useful when the files have drifted apart.''';
@@ -215,22 +226,51 @@ int run(List<String> args, {Directory? workingDirectory}) {
     }
   }
 
+  final message = 'chore: bump version to ${next.name}';
+  final wantsCommit = options.flag('commit');
+
   stdout.writeln();
   if (writes.isEmpty) {
     stdout.writeln('Everything is already at this version — nothing to write.');
     return 0;
   }
   if (options.flag('dry-run')) {
-    stdout.writeln('Dry run — no files written.');
+    stdout.writeln(
+      wantsCommit
+          ? 'Dry run — no files written, nothing committed.'
+          : 'Dry run — no files written.',
+    );
     return 0;
   }
 
   writes.forEach((file, content) => file.writeAsStringSync(content));
-  stdout
-    ..writeln('Done. Review with:  git diff')
-    ..writeln(
-      'Then commit with:   git commit -am "chore: bump version to ${next.name}"',
-    );
+
+  if (!wantsCommit) {
+    stdout
+      ..writeln('Done. Review with:  git diff')
+      ..writeln('Then commit with:   git commit -am "$message"');
+    return 0;
+  }
+
+  // The bump itself succeeded, so a project without Git is a warning rather
+  // than a failure — there is nothing to undo.
+  if (!isGitRepository(project.root)) {
+    stdout.writeln('Done — files written.');
+    _warn('--commit was given but this is not a Git repository.');
+    return 0;
+  }
+
+  final failure = commitFiles(
+    root: project.root,
+    files: writes.keys,
+    message: message,
+  );
+  if (failure != null) {
+    stdout.writeln('Done — files written, but the commit failed.');
+    return _fail(failure);
+  }
+
+  stdout.writeln('Done. Committed:  $message');
   return 0;
 }
 

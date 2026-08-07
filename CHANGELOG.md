@@ -1,3 +1,11 @@
+## Unreleased
+
+- `--commit` (`-c`) commits the updated files when the project is a Git
+  repository. Only the files bumpv wrote go into the commit, as
+  `chore: bump version to X.Y.Z`, so unrelated work in progress is left alone.
+  Outside a repository it warns and leaves the bump in place; with `--dry-run`
+  nothing is written or committed.
+
 ## 1.0.0
 
 Initial release.

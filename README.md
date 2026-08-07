@@ -61,6 +61,7 @@ bumpv 2.4.0+7               # set version and build number
 |---|---|
 | `--build N` | Set the build number explicitly |
 | `--bump-build` | Increment the build number |
+| `--commit`, `-c` | Commit the updated files (Git projects) |
 | `--dry-run` | Print what would change, write nothing |
 | `--project DIR` | Target another directory |
 
@@ -70,6 +71,26 @@ App stores reject a repeated build number, so use `--bump-build` for a release:
 ```bash
 bumpv minor --bump-build    # 1.2.1+1 -> 1.3.0+2
 ```
+
+### Committing the bump
+
+`--commit` (or `-c`) commits the files it just wrote:
+
+```console
+$ bumpv patch --commit
+1.2.1+1  ->  1.2.2+1
+
+  pubspec.yaml               1.2.1+1 -> 1.2.2+1
+  ios/…/project.pbxproj      FLUTTER_BUILD_NAME: 1.2.1 -> 1.2.2  (Debug, Release, Profile)
+  android                    no edit needed — versionName/versionCode come from pubspec.yaml
+
+Done. Committed:  chore: bump version to 1.2.2
+```
+
+Only the files bumpv wrote go into the commit, so whatever else you have in
+progress stays exactly where it was — staged or not. If the project isn't a Git
+repository you get a warning and the bump still stands, and `--dry-run` wins:
+nothing is written and nothing is committed.
 
 ### Repairing drift
 
