@@ -1,4 +1,4 @@
-## Unreleased
+## 1.1.0
 
 - `--commit` (`-c`) commits the updated files when the project is a Git
   repository. Only the files bumpv wrote go into the commit, as
