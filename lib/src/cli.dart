@@ -10,7 +10,7 @@ import 'updaters/pubspec_updater.dart';
 import 'updaters/xcode_updater.dart';
 import 'version.dart';
 
-const _packageVersion = '1.1.0';
+const _packageVersion = '1.2.0';
 
 /// Exit codes: 0 success, 1 runtime failure, 64 usage error (sysexits.h).
 const _exitFailure = 1;
