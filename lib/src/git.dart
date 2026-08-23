@@ -37,6 +37,22 @@ String? commitFiles({
   return null;
 }
 
+/// Creates an annotated tag [name] at HEAD.
+///
+/// Annotated rather than lightweight: a release tag carries its own author and
+/// date, and `git describe` only considers annotated tags by default. Returns
+/// null on success, or a message describing the failure.
+String? createTag({
+  required Directory root,
+  required String name,
+}) {
+  final tagged = _git(['tag', '--annotate', '--message', name, name], root);
+  if (tagged == null) return _gitMissing;
+  if (tagged.exitCode != 0) return _describe('git tag', tagged);
+
+  return null;
+}
+
 const _gitMissing = 'git is not installed or not on PATH';
 
 /// Runs git in [directory], returning null when git itself cannot be run.

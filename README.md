@@ -62,6 +62,7 @@ bumpv 2.4.0+7               # set version and build number
 | `--build N` | Set the build number explicitly |
 | `--bump-build` | Increment the build number |
 | `--commit`, `-c` | Commit the updated files (Git projects) |
+| `--tag`, `-t` | Tag the bump commit — `--tag=NAME` to name it yourself |
 | `--dry-run` | Print what would change, write nothing |
 | `--project DIR` | Target another directory |
 
@@ -91,6 +92,42 @@ Only the files bumpv wrote go into the commit, so whatever else you have in
 progress stays exactly where it was — staged or not. If the project isn't a Git
 repository you get a warning and the bump still stands, and `--dry-run` wins:
 nothing is written and nothing is committed.
+
+### Tagging the release
+
+`--tag` (or `-t`) puts an annotated tag on that commit, named after the new
+version:
+
+```console
+$ bumpv minor --tag
+1.2.1+1  ->  1.3.0+1
+
+  pubspec.yaml               1.2.1+1 -> 1.3.0+1
+  ios/…/project.pbxproj      FLUTTER_BUILD_NAME: 1.2.1 -> 1.3.0  (Debug, Release, Profile)
+  android                    no edit needed — versionName/versionCode come from pubspec.yaml
+
+Done. Committed:  chore: bump version to 1.3.0
+Tagged:           1.3.0
+```
+
+To choose the name yourself, **attach** it — `--tag=NAME` or `-tNAME`:
+
+```bash
+bumpv minor --tag=v1.3.0     # tag it v1.3.0
+bumpv minor -tv1.3.0         # same, short form
+```
+
+The value has to be attached because it is optional: in `bumpv --tag minor`
+there would be no way to tell a tag name from the bump type, so a detached
+name is rejected with a hint rather than quietly doing the wrong thing.
+
+`--tag` implies `--commit` — a tag is only worth having on the commit that
+carries the bump. The exceptions behave the way you would expect: `--dry-run`
+creates no tag, a project without Git warns, and if the version is already
+current there is nothing to commit, so the tag simply goes on `HEAD`. Should
+the tag name already exist, Git says so and bumpv exits non-zero with the bump
+itself intact — re-running with the version you just set tags it without
+touching anything else.
 
 ### Repairing drift
 

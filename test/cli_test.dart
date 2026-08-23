@@ -62,6 +62,29 @@ void main() {
 
   String pbxprojOf(Directory root) => pbxprojFile(root).readAsStringSync();
 
+  /// Turns [root] into a repository with one commit, so a bump has a HEAD to
+  /// commit against. Identity and signing are set locally to keep the test
+  /// independent of the machine's global Git config.
+  void initRepo(Directory root) {
+    for (final args in const [
+      ['init', '--quiet'],
+      ['config', 'user.name', 'bumpv test'],
+      ['config', 'user.email', 'bumpv@example.com'],
+      ['config', 'commit.gpgsign', 'false'],
+      ['config', 'tag.gpgsign', 'false'],
+      ['add', '.'],
+      ['commit', '--quiet', '-m', 'initial'],
+    ]) {
+      final result = Process.runSync('git', args, workingDirectory: root.path);
+      expect(result.exitCode, 0, reason: 'git ${args.first}: ${result.stderr}');
+    }
+  }
+
+  String gitOutput(Directory root, List<String> args) =>
+      (Process.runSync('git', args, workingDirectory: root.path).stdout
+              as String)
+          .trim();
+
   setUp(() => temp = Directory.systemTemp.createTempSync('bumpv_test_'));
   tearDown(() => temp.deleteSync(recursive: true));
 
@@ -179,33 +202,6 @@ void main() {
   });
 
   group('--commit', () {
-    /// Turns [root] into a repository with one commit, so the bump has a HEAD
-    /// to commit against. Identity is set locally to keep the test independent
-    /// of the machine's global Git config.
-    void initRepo(Directory root) {
-      for (final args in const [
-        ['init', '--quiet'],
-        ['config', 'user.name', 'bumpv test'],
-        ['config', 'user.email', 'bumpv@example.com'],
-        ['config', 'commit.gpgsign', 'false'],
-        ['add', '.'],
-        ['commit', '--quiet', '-m', 'initial'],
-      ]) {
-        final result =
-            Process.runSync('git', args, workingDirectory: root.path);
-        expect(
-          result.exitCode,
-          0,
-          reason: 'git ${args.first}: ${result.stderr}',
-        );
-      }
-    }
-
-    String gitOutput(Directory root, List<String> args) =>
-        (Process.runSync('git', args, workingDirectory: root.path).stdout
-                as String)
-            .trim();
-
     test('commits the updated files', () {
       final root = makeProject();
       initRepo(root);
@@ -275,6 +271,137 @@ void main() {
 
       expect(run(['1.3.0', '--commit', '--project', root.path]), 0);
       expect(gitOutput(root, ['log', '-1', '--pretty=%s']), 'initial');
+    });
+  });
+
+  group('--tag', () {
+    /// The tag names in the repository, newest bump first.
+    List<String> tagsOf(Directory root) {
+      final output = gitOutput(root, ['tag', '--list']);
+      return output.isEmpty ? const [] : output.split('\n');
+    }
+
+    /// The commit a tag resolves to, peeling the annotation away.
+    String commitOf(Directory root, String tag) =>
+        gitOutput(root, ['rev-parse', '$tag^{commit}']);
+
+    test('tags the bump with the new version by default', () {
+      final root = makeProject();
+      initRepo(root);
+
+      expect(run(['minor', '--tag', '--project', root.path]), 0);
+
+      expect(tagsOf(root), ['1.3.0']);
+    });
+
+    test('-t is the short form', () {
+      final root = makeProject();
+      initRepo(root);
+
+      expect(run(['patch', '-t', '--project', root.path]), 0);
+
+      expect(tagsOf(root), ['1.2.2']);
+    });
+
+    test('an attached value names the tag instead', () {
+      final root = makeProject();
+      initRepo(root);
+
+      expect(run(['minor', '--tag=v1.3.0', '--project', root.path]), 0);
+
+      expect(tagsOf(root), ['v1.3.0']);
+    });
+
+    test('the short form takes an attached value too', () {
+      final root = makeProject();
+      initRepo(root);
+
+      expect(run(['minor', '-trelease-candidate', '--project', root.path]), 0);
+
+      expect(tagsOf(root), ['release-candidate']);
+    });
+
+    test('the tag is annotated, not lightweight', () {
+      final root = makeProject();
+      initRepo(root);
+
+      expect(run(['minor', '--tag', '--project', root.path]), 0);
+
+      expect(gitOutput(root, ['cat-file', '-t', '1.3.0']), 'tag');
+    });
+
+    test('implies --commit, and tags the commit carrying the bump', () {
+      final root = makeProject();
+      initRepo(root);
+
+      expect(run(['minor', '--tag', '--project', root.path]), 0);
+
+      expect(
+        gitOutput(root, ['log', '-1', '--pretty=%s']),
+        'chore: bump version to 1.3.0',
+      );
+      expect(commitOf(root, '1.3.0'), gitOutput(root, ['rev-parse', 'HEAD']));
+      expect(gitOutput(root, ['status', '--porcelain']), isEmpty);
+    });
+
+    test('a detached name is a usage error, not a silent default', () {
+      final root = makeProject();
+      initRepo(root);
+
+      expect(run(['minor', '--tag', 'v1.3.0', '--project', root.path]), 64);
+      expect(tagsOf(root), isEmpty);
+      expect(pubspecOf(root), contains('version: 1.2.1+1'));
+    });
+
+    test('with --dry-run nothing is written, committed or tagged', () {
+      final root = makeProject();
+      initRepo(root);
+
+      expect(run(['major', '--tag', '--dry-run', '--project', root.path]), 0);
+
+      expect(pubspecOf(root), contains('version: 1.2.1+1'));
+      expect(gitOutput(root, ['log', '-1', '--pretty=%s']), 'initial');
+      expect(tagsOf(root), isEmpty);
+    });
+
+    test('warns but still succeeds outside a repository', () {
+      final root = makeProject();
+
+      expect(run(['minor', '--tag', '--project', root.path]), 0);
+      expect(pubspecOf(root), contains('version: 1.3.0+1'));
+    });
+
+    test('tags HEAD when the files already carry this version', () {
+      final root = makeProject();
+      expect(run(['minor', '--project', root.path]), 0);
+      initRepo(root);
+
+      expect(run(['1.3.0', '--tag', '--project', root.path]), 0);
+
+      // Nothing needed writing, so there is no new commit to make — but the
+      // version is the one HEAD carries, so the tag belongs there.
+      expect(gitOutput(root, ['log', '-1', '--pretty=%s']), 'initial');
+      expect(tagsOf(root), ['1.3.0']);
+    });
+
+    test('fails when the tag already exists', () {
+      final root = makeProject();
+      initRepo(root);
+      expect(
+        Process.runSync('git', ['tag', '1.3.0'], workingDirectory: root.path)
+            .exitCode,
+        0,
+      );
+
+      expect(run(['minor', '--tag', '--project', root.path]), 1);
+
+      // The bump itself stands: re-running would find the version current and
+      // go straight back to tagging it.
+      expect(pubspecOf(root), contains('version: 1.3.0+1'));
+      expect(
+        gitOutput(root, ['log', '-1', '--pretty=%s']),
+        'chore: bump version to 1.3.0',
+      );
     });
   });
 
