@@ -1,4 +1,4 @@
-## Unreleased
+## 1.3.0
 
 - `--tag-format` names the tag from a template: `{version}` is the new version
   and `{build}` the build number, so `v{version}` gives `v1.3.0` and
