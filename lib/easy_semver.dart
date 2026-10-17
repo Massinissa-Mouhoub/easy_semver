@@ -15,7 +15,9 @@ library;
 
 export 'src/change.dart';
 export 'src/cli.dart' show buildParser, run, usage;
+export 'src/config.dart';
 export 'src/project.dart';
+export 'src/tag_format.dart';
 export 'src/updaters/gradle_updater.dart';
 export 'src/updaters/pubspec_updater.dart';
 export 'src/updaters/xcode_updater.dart';

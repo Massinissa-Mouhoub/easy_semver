@@ -405,6 +405,178 @@ void main() {
     });
   });
 
+  group('tag naming', () {
+    List<String> tagsOf(Directory root) {
+      final output = gitOutput(root, ['tag', '--list']);
+      return output.isEmpty ? const [] : output.split('\n');
+    }
+
+    /// Adds a `bumpv:` section to [root]'s pubspec and commits it, so the
+    /// working tree is clean before the bump runs.
+    void configure(Directory root, String section) {
+      final pubspec = File('${root.path}/pubspec.yaml');
+      pubspec.writeAsStringSync('${pubspec.readAsStringSync()}\n$section');
+      for (final args in const [
+        ['add', 'pubspec.yaml'],
+        ['commit', '--quiet', '-m', 'configure bumpv'],
+      ]) {
+        Process.runSync('git', args, workingDirectory: root.path);
+      }
+    }
+
+    test('--tag-format names the tag from a template', () {
+      final root = makeProject();
+      initRepo(root);
+
+      expect(
+        run(['minor', '--tag-format=v{version}', '--project', root.path]),
+        0,
+      );
+
+      expect(tagsOf(root), ['v1.3.0']);
+    });
+
+    test('--tag-format takes a detached value, since it is never optional', () {
+      final root = makeProject();
+      initRepo(root);
+
+      expect(
+        run([
+          'minor',
+          '--tag-format',
+          '{version}-beta',
+          '--project',
+          root.path
+        ]),
+        0,
+      );
+
+      expect(tagsOf(root), ['1.3.0-beta']);
+    });
+
+    test('--tag-format implies --tag and --commit', () {
+      final root = makeProject();
+      initRepo(root);
+
+      expect(
+        run(['minor', '--tag-format=v{version}', '--project', root.path]),
+        0,
+      );
+
+      expect(
+        gitOutput(root, ['log', '-1', '--pretty=%s']),
+        'chore: bump version to 1.3.0',
+      );
+      expect(
+        gitOutput(root, ['rev-parse', 'v1.3.0^{commit}']),
+        gitOutput(root, ['rev-parse', 'HEAD']),
+      );
+    });
+
+    test('{build} is the build number after the bump', () {
+      final root = makeProject();
+      initRepo(root);
+
+      expect(
+        run([
+          'minor',
+          '--bump-build',
+          '--tag-format=v{version}+{build}',
+          '--project',
+          root.path,
+        ]),
+        0,
+      );
+
+      expect(tagsOf(root), ['v1.3.0+2']);
+    });
+
+    test('a --tag-format without {version} is a usage error', () {
+      final root = makeProject();
+      initRepo(root);
+
+      expect(
+          run(['minor', '--tag-format=release', '--project', root.path]), 64);
+
+      expect(pubspecOf(root), contains('version: 1.2.1+1'));
+      expect(tagsOf(root), isEmpty);
+    });
+
+    test('--tag=NAME together with --tag-format is a usage error', () {
+      final root = makeProject();
+      initRepo(root);
+
+      expect(
+        run([
+          'minor',
+          '--tag=v1.3.0',
+          '--tag-format=v{version}',
+          '--project',
+          root.path,
+        ]),
+        64,
+      );
+
+      expect(pubspecOf(root), contains('version: 1.2.1+1'));
+    });
+
+    test('a bare --tag uses bumpv.tag_format from pubspec.yaml', () {
+      final root = makeProject();
+      initRepo(root);
+      configure(root, 'bumpv:\n  tag_format: v{version}\n');
+
+      expect(run(['minor', '--tag', '--project', root.path]), 0);
+
+      expect(tagsOf(root), ['v1.3.0']);
+    });
+
+    test('--tag-format overrides the pubspec setting', () {
+      final root = makeProject();
+      initRepo(root);
+      configure(root, 'bumpv:\n  tag_format: v{version}\n');
+
+      expect(
+        run(['minor', '--tag-format=app-{version}', '--project', root.path]),
+        0,
+      );
+
+      expect(tagsOf(root), ['app-1.3.0']);
+    });
+
+    test('--tag=NAME overrides the pubspec setting', () {
+      final root = makeProject();
+      initRepo(root);
+      configure(root, 'bumpv:\n  tag_format: v{version}\n');
+
+      expect(run(['minor', '--tag=rc1', '--project', root.path]), 0);
+
+      expect(tagsOf(root), ['rc1']);
+    });
+
+    test('the pubspec setting alone does not tag or commit', () {
+      final root = makeProject();
+      initRepo(root);
+      configure(root, 'bumpv:\n  tag_format: v{version}\n');
+
+      expect(run(['minor', '--project', root.path]), 0);
+
+      expect(pubspecOf(root), contains('version: 1.3.0+1'));
+      expect(gitOutput(root, ['log', '-1', '--pretty=%s']), 'configure bumpv');
+      expect(tagsOf(root), isEmpty);
+    });
+
+    test('an invalid pubspec setting fails before anything is written', () {
+      final root = makeProject();
+      initRepo(root);
+      configure(root, 'bumpv:\n  tag_format: release\n');
+
+      expect(run(['minor', '--tag', '--project', root.path]), 1);
+
+      expect(pubspecOf(root), contains('version: 1.2.1+1'));
+      expect(tagsOf(root), isEmpty);
+    });
+  });
+
   test('finds the project root from a nested working directory', () {
     final root = makeProject();
     final nested = Directory('${root.path}/lib/features')

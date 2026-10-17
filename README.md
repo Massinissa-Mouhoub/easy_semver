@@ -63,6 +63,7 @@ bumpv 2.4.0+7               # set version and build number
 | `--bump-build` | Increment the build number |
 | `--commit`, `-c` | Commit the updated files (Git projects) |
 | `--tag`, `-t` | Tag the bump commit — `--tag=NAME` to name it yourself |
+| `--tag-format FORMAT` | Name the tag from a template such as `v{version}`; implies `--tag` |
 | `--dry-run` | Print what would change, write nothing |
 | `--project DIR` | Target another directory |
 
@@ -128,6 +129,45 @@ current there is nothing to commit, so the tag simply goes on `HEAD`. Should
 the tag name already exist, Git says so and bumpv exits non-zero with the bump
 itself intact — re-running with the version you just set tags it without
 touching anything else.
+
+### Naming tags with a format
+
+Most projects want every tag shaped the same way, such as `v1.3.0`. Give
+`--tag-format` a template and bumpv fills it in; it implies `--tag`:
+
+```bash
+bumpv minor --tag-format=v{version}           # v1.3.0
+bumpv minor --tag-format={version}-beta       # 1.3.0-beta
+bumpv minor --tag-format=app-v{version}       # app-v1.3.0 (monorepos)
+bumpv minor --bump-build --tag-format=v{version}+{build}   # v1.3.0+2
+```
+
+| Placeholder | Becomes |
+|---|---|
+| `{version}` | The new version without the build number: `1.3.0` |
+| `{build}` | The build number after the bump: `2` |
+
+A format must contain `{version}`, because without it every release would get
+the same tag, and any other placeholder is rejected as a likely typo.
+
+To use one format for every release, put it in `pubspec.yaml`. A plain `--tag`
+then picks it up:
+
+```yaml
+bumpv:
+  tag_format: v{version}
+```
+
+```bash
+bumpv minor --tag       # tagged v1.3.0
+```
+
+The setting only names tags; it never creates one by itself. When more than one
+name is given, the most specific wins: `--tag=NAME`, then `--tag-format`, then
+`bumpv.tag_format`, then the bare version. Passing both `--tag=NAME` and
+`--tag-format` is a usage error. bumpv reads the `bumpv:` section on every run
+and stops before writing anything if it holds an unknown key or an invalid
+format.
 
 ### Repairing drift
 

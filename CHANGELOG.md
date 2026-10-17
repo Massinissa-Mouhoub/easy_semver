@@ -1,3 +1,15 @@
+## Unreleased
+
+- `--tag-format` names the tag from a template: `{version}` is the new version
+  and `{build}` the build number, so `v{version}` gives `v1.3.0` and
+  `{version}-beta` gives `1.3.0-beta`. It implies `--tag`, and cannot be
+  combined with `--tag=NAME`. A format without `{version}`, or with an unknown
+  placeholder, is a usage error.
+- A `bumpv:` section in `pubspec.yaml` sets the default format for a plain
+  `--tag`: `tag_format: v{version}`. It names tags but never creates one by
+  itself. An unknown key or an invalid format stops bumpv before anything is
+  written.
+
 ## 1.2.0
 
 - `--tag` (`-t`) puts an annotated Git tag on the bump commit, named after the
