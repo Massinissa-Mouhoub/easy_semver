@@ -3,8 +3,10 @@ import 'dart:io';
 import 'package:args/args.dart';
 
 import 'change.dart';
+import 'config.dart';
 import 'git.dart';
 import 'project.dart';
+import 'tag_format.dart';
 import 'updaters/gradle_updater.dart';
 import 'updaters/pubspec_updater.dart';
 import 'updaters/xcode_updater.dart';
@@ -60,8 +62,15 @@ ArgParser buildParser() => ArgParser()
     'tag',
     abbr: 't',
     valueHelp: 'NAME',
-    help: 'Tag the bump commit, named after the new version unless a name is '
-        'attached. Implies --commit.',
+    help: 'Tag the bump commit. Without an attached name, the tag is named by '
+        '--tag-format, then bumpv.tag_format in pubspec.yaml, then the bare '
+        'version. Implies --commit.',
+  )
+  ..addOption(
+    'tag-format',
+    valueHelp: 'FORMAT',
+    help: 'Name the tag from a template: {version} is the new version and '
+        '{build} the build number, e.g. v{version}. Implies --tag.',
   )
   ..addFlag('version', negatable: false, help: 'Print the bumpv version.')
   ..addFlag('help', abbr: 'h', negatable: false, help: 'Show this help.');
@@ -91,6 +100,12 @@ List<String> _markBareTag(List<String> args) {
   return marked;
 }
 
+/// The name attached to `--tag=NAME`, or null for a bare `--tag` or none.
+String? _attachedTagName(ArgResults options) {
+  final name = options.option('tag');
+  return name == null || name.trim().isEmpty ? null : name;
+}
+
 String usage(ArgParser parser) => '''
 Bump a Flutter app's version across pubspec.yaml, iOS and Android.
 
@@ -108,6 +123,8 @@ Examples:
   bumpv patch --commit        bump, then commit the files that changed
   bumpv patch --tag           commit, then tag that commit 1.2.2
   bumpv patch --tag=v1.2.2    tag it v1.2.2 instead
+  bumpv patch --tag-format=v{version}
+                              tag it v1.2.2, and v1.2.3 next time
 
 The build number is preserved unless --build or --bump-build is given. App
 stores reject a repeated build number, so use --bump-build for a release.
@@ -119,6 +136,14 @@ stores reject a repeated build number, so use --bump-build for a release.
 To name it yourself the value must be attached — --tag=NAME or -tNAME, not
 --tag NAME, which would be indistinguishable from the bump type. --tag implies
 --commit: a tag is only worth having on the commit that carries the bump.
+
+--tag-format names the tag from a template instead: {version} is the new
+version and {build} its build number, so v{version} gives v1.2.2 and
+{version}-beta gives 1.2.2-beta. To use one format for every release, set it
+in pubspec.yaml and a plain --tag picks it up:
+
+  bumpv:
+    tag_format: v{version}
 
 Running with the current version re-syncs iOS and Android without changing the
 version — useful when the files have drifted apart.''';
@@ -176,6 +201,19 @@ int run(List<String> args, {Directory? workingDirectory}) {
     }
   }
 
+  TagFormat? tagFormat;
+  final tagFormatOption = options.option('tag-format');
+  if (tagFormatOption != null) {
+    if (_attachedTagName(options) != null) {
+      return _usageError('use either --tag=NAME or --tag-format', parser);
+    }
+    try {
+      tagFormat = TagFormat.parse(tagFormatOption);
+    } on FormatException catch (e) {
+      return _usageError(e.message, parser);
+    }
+  }
+
   final projectOption = options.option('project');
   final start = projectOption != null
       ? Directory(projectOption)
@@ -195,6 +233,15 @@ int run(List<String> args, {Directory? workingDirectory}) {
   final current = readPubspecVersion(pubspecText);
   if (current == null) {
     return _fail('no "version: X.Y.Z" line in ${project.pubspec.path}');
+  }
+
+  // Read on every run, not only when tagging, so a broken setting is reported
+  // the first time it is there rather than on the release that needs it.
+  final BumpvConfig config;
+  try {
+    config = readConfig(pubspecText);
+  } on FormatException catch (e) {
+    return _fail(e.message);
   }
 
   var next = kind != null
@@ -272,10 +319,11 @@ int run(List<String> args, {Directory? workingDirectory}) {
 
   // Resolved here rather than at parse time because the default name is the
   // version we have only just worked out.
-  final tagOption = options.option('tag');
-  final tag = tagOption == null
+  final tagRequested = options.option('tag') != null || tagFormat != null;
+  final tag = !tagRequested
       ? null
-      : (tagOption.trim().isEmpty ? next.name : tagOption);
+      : _attachedTagName(options) ??
+          (tagFormat ?? config.tagFormat ?? TagFormat.standard).render(next);
 
   return _publish(
     project: project,
