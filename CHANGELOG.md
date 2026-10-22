@@ -1,4 +1,4 @@
-## Unreleased
+## 1.4.0
 
 - `-B` is the short form of `--bump-build`, so a store upload is
   `bumpv minor -t -B`. `-b` keeps its meaning, the short form of `--build`.
