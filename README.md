@@ -59,8 +59,8 @@ bumpv 2.4.0+7               # set version and build number
 
 | Option | Effect |
 |---|---|
-| `--build N` | Set the build number explicitly |
-| `--bump-build` | Increment the build number |
+| `--build N`, `-b N` | Set the build number explicitly |
+| `--bump-build`, `-B` | Increment the build number |
 | `--commit`, `-c` | Commit the updated files (Git projects) |
 | `--tag`, `-t` | Tag the bump commit — `--tag=NAME` to name it yourself |
 | `--tag-format FORMAT` | Name the tag from a template such as `v{version}`; implies `--tag` |
@@ -72,7 +72,12 @@ App stores reject a repeated build number, so use `--bump-build` for a release:
 
 ```bash
 bumpv minor --bump-build    # 1.2.1+1 -> 1.3.0+2
+bumpv minor -B              # the same, short form
 ```
+
+Mind the case: `-b` is `--build`, so it sets the number you give instead of
+adding one. A `-b` with no number, or with something that is not a number,
+stops with a hint pointing at `-B`.
 
 ### Committing the bump
 

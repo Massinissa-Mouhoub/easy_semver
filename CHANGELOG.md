@@ -1,3 +1,13 @@
+## Unreleased
+
+- `-B` is the short form of `--bump-build`, so a store upload is
+  `bumpv minor -t -B`. `-b` keeps its meaning, the short form of `--build`.
+- A `-b` (or `--build`) with no number, or with something that is not a
+  number, now says to use `-B` to add one to the build number. Before, it
+  stopped with "Missing argument" or "needs a positive integer", and `-b minor`
+  said the bump type was missing, because `minor` had been taken as the build
+  number.
+
 ## 1.3.0
 
 - `--tag-format` names the tag from a template: `{version}` is the new version
