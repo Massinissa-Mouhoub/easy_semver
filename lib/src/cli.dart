@@ -39,6 +39,7 @@ ArgParser buildParser() => ArgParser()
   )
   ..addFlag(
     'bump-build',
+    abbr: 'B',
     negatable: false,
     help: 'Increment the build number (use for store uploads).',
   )
@@ -74,6 +75,17 @@ ArgParser buildParser() => ArgParser()
   )
   ..addFlag('version', negatable: false, help: 'Print the bumpv version.')
   ..addFlag('help', abbr: 'h', negatable: false, help: 'Show this help.');
+
+/// Added to a `--build` mistake. `-b` reads like "bump build", but it sets the
+/// number, so someone who wanted the increment is pointed at the flag that
+/// does it.
+const _bumpBuildHint = ' — to add one to the build number, use -B '
+    '(--bump-build)';
+
+/// True when `-b`/`--build` is the last argument, the one case ArgParser
+/// rejects itself: anywhere else the next argument is taken as its value.
+bool _buildLacksValue(List<String> args) =>
+    args.isNotEmpty && (args.last == '-b' || args.last == '--build');
 
 /// Stands in for `--tag` given without a name.
 ///
@@ -120,6 +132,7 @@ Examples:
   bumpv 2.4.0                 set the version exactly
   bumpv 2.4.0+7               set version and build number
   bumpv minor --bump-build    bump both, for a store upload
+  bumpv minor -B              the same, short form
   bumpv patch --commit        bump, then commit the files that changed
   bumpv patch --tag           commit, then tag that commit 1.2.2
   bumpv patch --tag=v1.2.2    tag it v1.2.2 instead
@@ -127,7 +140,9 @@ Examples:
                               tag it v1.2.2, and v1.2.3 next time
 
 The build number is preserved unless --build or --bump-build is given. App
-stores reject a repeated build number, so use --bump-build for a release.
+stores reject a repeated build number, so use --bump-build (-B) for a release.
+-b is the short form of --build: it sets the number you give, it does not add
+one.
 
 --commit stages only the files bumpv wrote and commits them as
 "chore: bump version to X.Y.Z", leaving any other work in progress alone.
@@ -155,6 +170,9 @@ int run(List<String> args, {Directory? workingDirectory}) {
   try {
     options = parser.parse(_markBareTag(args));
   } on FormatException catch (e) {
+    if (_buildLacksValue(args)) {
+      return _usageError('--build needs a number$_bumpBuildHint', parser);
+    }
     return _usageError(e.message, parser);
   }
 
@@ -165,6 +183,26 @@ int run(List<String> args, {Directory? workingDirectory}) {
   if (options.flag('version')) {
     stdout.writeln('bumpv $_packageVersion');
     return 0;
+  }
+
+  // Checked before the bump type: `-b minor` takes `minor` as the build
+  // number, and "missing bump type" would hide what actually went wrong.
+  int? explicitBuild;
+  final buildOption = options.option('build');
+  if (buildOption != null) {
+    if (options.flag('bump-build')) {
+      return _usageError('use either --build or --bump-build', parser);
+    }
+    explicitBuild = int.tryParse(buildOption);
+    if (explicitBuild == null) {
+      return _usageError(
+        '--build needs a number, got "$buildOption"$_bumpBuildHint',
+        parser,
+      );
+    }
+    if (explicitBuild < 1) {
+      return _usageError('--build needs a positive integer', parser);
+    }
   }
 
   if (options.rest.isEmpty) {
@@ -187,18 +225,6 @@ int run(List<String> args, {Directory? workingDirectory}) {
       '"$target" is neither major/minor/patch nor a version like 2.4.0',
       parser,
     );
-  }
-
-  int? explicitBuild;
-  final buildOption = options.option('build');
-  if (buildOption != null) {
-    if (options.flag('bump-build')) {
-      return _usageError('use either --build or --bump-build', parser);
-    }
-    explicitBuild = int.tryParse(buildOption);
-    if (explicitBuild == null || explicitBuild < 1) {
-      return _usageError('--build needs a positive integer', parser);
-    }
   }
 
   TagFormat? tagFormat;

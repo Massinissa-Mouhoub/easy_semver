@@ -36,8 +36,35 @@ android {
 }
 ''';
 
+/// Collects what bumpv prints to stderr. Only the two write methods are used.
+class _CapturedStderr implements Stdout {
+  final _text = StringBuffer();
+
+  String get text => _text.toString();
+
+  @override
+  void write(Object? object) => _text.write(object);
+
+  @override
+  void writeln([Object? object = '']) => _text.writeln(object);
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
   late Directory temp;
+
+  /// Runs bumpv and returns its exit code with the first line it printed to
+  /// stderr, which is the error itself.
+  ({int code, String error}) runCapturing(List<String> args) {
+    final captured = _CapturedStderr();
+    final code = IOOverrides.runZoned(
+      () => run(args),
+      stderr: () => captured,
+    );
+    return (code: code, error: captured.text.split('\n').first);
+  }
 
   /// A throwaway project with the three files bumpv knows about.
   Directory makeProject() {
@@ -111,6 +138,38 @@ void main() {
       expect(run(const ['minor', '--build', '3', '--bump-build']), 64);
     });
 
+    group('a -b that was meant as -B', () {
+      test('-b with nothing after it', () {
+        for (final args in const [
+          ['minor', '-c', '-t', '-b'],
+          ['minor', '--build'],
+        ]) {
+          final result = runCapturing(args);
+          expect(result.code, 64);
+          expect(result.error, contains('use -B (--bump-build)'));
+        }
+      });
+
+      test('-b followed by something that is not a number', () {
+        for (final args in const [
+          ['minor', '-b', 'x'],
+          ['minor', '-b', '-t'],
+          ['-b', 'minor'],
+        ]) {
+          final result = runCapturing(args);
+          expect(result.code, 64);
+          expect(result.error, contains('use -B (--bump-build)'));
+        }
+      });
+
+      test('a number that is not positive keeps the plain error', () {
+        final result = runCapturing(const ['minor', '-b', '0']);
+        expect(result.code, 64);
+        expect(result.error, contains('positive integer'));
+        expect(result.error, isNot(contains('-B')));
+      });
+    });
+
     test('an unknown flag', () {
       expect(run(const ['minor', '--oops']), 64);
     });
@@ -143,6 +202,21 @@ void main() {
       expect(pubspecOf(root), contains('version: 1.3.0+2'));
       expect(pbxprojOf(root), contains('FLUTTER_BUILD_NUMBER = 2;'));
       expect(pbxprojOf(root), contains('CURRENT_PROJECT_VERSION = 2;'));
+    });
+
+    test('-B is the short form of --bump-build', () {
+      final root = makeProject();
+      expect(run(['minor', '-B', '--project', root.path]), 0);
+
+      expect(pubspecOf(root), contains('version: 1.3.0+2'));
+      expect(pbxprojOf(root), contains('CURRENT_PROJECT_VERSION = 2;'));
+    });
+
+    test('-b still sets the build number it is given', () {
+      final root = makeProject();
+      expect(run(['minor', '-b', '7', '--project', root.path]), 0);
+
+      expect(pubspecOf(root), contains('version: 1.3.0+7'));
     });
 
     test('an explicit version keeps the current build number', () {
