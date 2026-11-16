@@ -1,4 +1,4 @@
-## Unreleased
+## 1.5.0
 
 - `bumpv --bump-build` (or `bumpv -B`) with no bump type adds one to the build
   number and leaves `X.Y.Z` alone: `1.2.1+1` becomes `1.2.1+2`. `--build N`
