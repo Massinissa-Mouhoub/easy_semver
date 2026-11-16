@@ -50,6 +50,11 @@ ArgParser buildParser() => ArgParser()
     help: 'Commit the updated files when the project is a Git repository.',
   )
   ..addFlag(
+    'current',
+    negatable: false,
+    help: "Print the project's current version and exit.",
+  )
+  ..addFlag(
     'dry-run',
     negatable: false,
     help: 'Print what would change without writing anything.',
@@ -122,6 +127,8 @@ String usage(ArgParser parser) => '''
 Bump a Flutter app's version across pubspec.yaml, iOS and Android.
 
 Usage: bumpv <major|minor|patch|X.Y.Z[+BUILD]> [options]
+       bumpv --bump-build | --build N [options]
+       bumpv --current
 
 ${parser.usage}
 
@@ -133,6 +140,9 @@ Examples:
   bumpv 2.4.0+7               set version and build number
   bumpv minor --bump-build    bump both, for a store upload
   bumpv minor -B              the same, short form
+  bumpv -B                    1.2.1+1 -> 1.2.1+2, build number only
+  bumpv --build 42            1.2.1+1 -> 1.2.1+42, build number only
+  bumpv --current             print 1.2.1+1
   bumpv patch --commit        bump, then commit the files that changed
   bumpv patch --tag           commit, then tag that commit 1.2.2
   bumpv patch --tag=v1.2.2    tag it v1.2.2 instead
@@ -141,11 +151,13 @@ Examples:
 
 The build number is preserved unless --build or --bump-build is given. App
 stores reject a repeated build number, so use --bump-build (-B) for a release.
+Given without a bump type, either one changes the build number and leaves
+X.Y.Z as it is.
 -b is the short form of --build: it sets the number you give, it does not add
 one.
 
 --commit stages only the files bumpv wrote and commits them as
-"chore: bump version to X.Y.Z", leaving any other work in progress alone.
+"chore: bump version to X.Y.Z+BUILD", leaving any other work in progress alone.
 
 --tag puts an annotated Git tag on that commit, named after the new version.
 To name it yourself the value must be attached — --tag=NAME or -tNAME, not
@@ -184,6 +196,9 @@ int run(List<String> args, {Directory? workingDirectory}) {
     stdout.writeln('bumpv $_packageVersion');
     return 0;
   }
+  if (options.flag('current')) {
+    return _printCurrent(_findProject(options, workingDirectory));
+  }
 
   // Checked before the bump type: `-b minor` takes `minor` as the build
   // number, and "missing bump type" would hide what actually went wrong.
@@ -205,7 +220,10 @@ int run(List<String> args, {Directory? workingDirectory}) {
     }
   }
 
-  if (options.rest.isEmpty) {
+  // A build flag on its own is a complete request: keep X.Y.Z, change the
+  // build number. Without one, there is nothing to do.
+  final buildOnly = explicitBuild != null || options.flag('bump-build');
+  if (options.rest.isEmpty && !buildOnly) {
     return _usageError('missing bump type or version', parser);
   }
   if (options.rest.length > 1) {
@@ -217,10 +235,10 @@ int run(List<String> args, {Directory? workingDirectory}) {
         : '';
     return _usageError('unexpected extra argument "$extra"$hint', parser);
   }
-  final target = options.rest.single;
+  final target = options.rest.isEmpty ? null : options.rest.single;
 
-  final kind = BumpKind.tryParse(target);
-  if (kind == null && Version.tryParse(target) == null) {
+  final kind = target == null ? null : BumpKind.tryParse(target);
+  if (target != null && kind == null && Version.tryParse(target) == null) {
     return _usageError(
       '"$target" is neither major/minor/patch nor a version like 2.4.0',
       parser,
@@ -240,19 +258,12 @@ int run(List<String> args, {Directory? workingDirectory}) {
     }
   }
 
-  final projectOption = options.option('project');
-  final start = projectOption != null
-      ? Directory(projectOption)
-      : (workingDirectory ?? Directory.current);
-  if (!start.existsSync()) {
-    return _fail('no such directory: ${start.path}');
-  }
-
-  final project = FlutterProject.find(start);
-  if (project == null) {
-    return _fail(
-      'no pubspec.yaml in ${start.absolute.path} or any parent directory',
-    );
+  final FlutterProject project;
+  switch (_findProject(options, workingDirectory)) {
+    case _ProjectFound(:final found):
+      project = found;
+    case _ProjectMissing(:final error):
+      return _fail(error);
   }
 
   final pubspecText = project.pubspec.readAsStringSync();
@@ -270,9 +281,12 @@ int run(List<String> args, {Directory? workingDirectory}) {
     return _fail(e.message);
   }
 
-  var next = kind != null
-      ? current.bump(kind)
-      : Version.tryParse(target, defaultBuild: current.build)!;
+  var next = switch ((kind, target)) {
+    (final BumpKind kind, _) => current.bump(kind),
+    (null, final String version) =>
+      Version.tryParse(version, defaultBuild: current.build)!,
+    (null, null) => current,
+  };
   if (explicitBuild != null) next = next.withBuild(explicitBuild);
   if (options.flag('bump-build')) next = next.withBuild(current.build + 1);
 
@@ -363,6 +377,55 @@ int run(List<String> args, {Directory? workingDirectory}) {
   );
 }
 
+sealed class _ProjectLookup {
+  const _ProjectLookup();
+}
+
+final class _ProjectFound extends _ProjectLookup {
+  const _ProjectFound(this.found);
+  final FlutterProject found;
+}
+
+final class _ProjectMissing extends _ProjectLookup {
+  const _ProjectMissing(this.error);
+  final String error;
+}
+
+/// The project named by `--project`, or the one around [workingDirectory].
+_ProjectLookup _findProject(ArgResults options, Directory? workingDirectory) {
+  final projectOption = options.option('project');
+  final start = projectOption != null
+      ? Directory(projectOption)
+      : (workingDirectory ?? Directory.current);
+  if (!start.existsSync()) {
+    return _ProjectMissing('no such directory: ${start.path}');
+  }
+
+  final project = FlutterProject.find(start);
+  if (project == null) {
+    return _ProjectMissing(
+      'no pubspec.yaml in ${start.absolute.path} or any parent directory',
+    );
+  }
+  return _ProjectFound(project);
+}
+
+/// Prints the pubspec version alone on stdout, so scripts can capture it:
+/// `VERSION=$(bumpv --current)`.
+int _printCurrent(_ProjectLookup lookup) {
+  switch (lookup) {
+    case _ProjectMissing(:final error):
+      return _fail(error);
+    case _ProjectFound(found: final project):
+      final current = readPubspecVersion(project.pubspec.readAsStringSync());
+      if (current == null) {
+        return _fail('no "version: X.Y.Z" line in ${project.pubspec.path}');
+      }
+      stdout.writeln(current);
+      return 0;
+  }
+}
+
 /// Writes the pending [writes], then commits and tags as asked.
 ///
 /// Split out of [run] because the version work is finished by this point:
@@ -375,7 +438,7 @@ int _publish({
   required bool commit,
   required bool dryRun,
 }) {
-  final message = 'chore: bump version to ${version.name}';
+  final message = 'chore: bump version to $version';
   final nothingToWrite = writes.isEmpty;
 
   stdout.writeln();

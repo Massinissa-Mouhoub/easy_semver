@@ -55,6 +55,8 @@ bumpv minor                 # 1.2.1 -> 1.3.0
 bumpv major                 # 1.2.1 -> 2.0.0
 bumpv 2.4.0                 # set the version exactly
 bumpv 2.4.0+7               # set version and build number
+bumpv -B                    # 1.2.1+1 -> 1.2.1+2, build number only
+bumpv --current             # print the current version: 1.2.1+1
 ```
 
 | Option | Effect |
@@ -64,6 +66,7 @@ bumpv 2.4.0+7               # set version and build number
 | `--commit`, `-c` | Commit the updated files (Git projects) |
 | `--tag`, `-t` | Tag the bump commit — `--tag=NAME` to name it yourself |
 | `--tag-format FORMAT` | Name the tag from a template such as `v{version}`; implies `--tag` |
+| `--current` | Print the project's current version and exit |
 | `--dry-run` | Print what would change, write nothing |
 | `--project DIR` | Target another directory |
 
@@ -73,7 +76,12 @@ App stores reject a repeated build number, so use `--bump-build` for a release:
 ```bash
 bumpv minor --bump-build    # 1.2.1+1 -> 1.3.0+2
 bumpv minor -B              # the same, short form
+bumpv -B                    # 1.2.1+1 -> 1.2.1+2, build number only
+bumpv --build 42            # 1.2.1+1 -> 1.2.1+42, build number only
 ```
+
+Without a bump type, `--bump-build` and `--build` change only the build number
+and leave `X.Y.Z` as it is: the way to ship another build of the same release.
 
 Mind the case: `-b` is `--build`, so it sets the number you give instead of
 adding one. A `-b` with no number, or with something that is not a number,
@@ -91,7 +99,7 @@ $ bumpv patch --commit
   ios/…/project.pbxproj      FLUTTER_BUILD_NAME: 1.2.1 -> 1.2.2  (Debug, Release, Profile)
   android                    no edit needed — versionName/versionCode come from pubspec.yaml
 
-Done. Committed:  chore: bump version to 1.2.2
+Done. Committed:  chore: bump version to 1.2.2+1
 ```
 
 Only the files bumpv wrote go into the commit, so whatever else you have in
@@ -112,7 +120,7 @@ $ bumpv minor --tag
   ios/…/project.pbxproj      FLUTTER_BUILD_NAME: 1.2.1 -> 1.3.0  (Debug, Release, Profile)
   android                    no edit needed — versionName/versionCode come from pubspec.yaml
 
-Done. Committed:  chore: bump version to 1.3.0
+Done. Committed:  chore: bump version to 1.3.0+1
 Tagged:           1.3.0
 ```
 
