@@ -140,7 +140,8 @@ Examples:
   bumpv 2.4.0+7               set version and build number
   bumpv minor --bump-build    bump both, for a store upload
   bumpv minor -B              the same, short form
-  bumpv -B                    1.2.1+1 -> 1.2.1+2, build number only
+  bumpv --bump-build          1.2.1+1 -> 1.2.1+2, build number only
+  bumpv -B                    the same, short form
   bumpv --build 42            1.2.1+1 -> 1.2.1+42, build number only
   bumpv --current             print 1.2.1+1
   bumpv patch --commit        bump, then commit the files that changed

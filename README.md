@@ -55,7 +55,8 @@ bumpv minor                 # 1.2.1 -> 1.3.0
 bumpv major                 # 1.2.1 -> 2.0.0
 bumpv 2.4.0                 # set the version exactly
 bumpv 2.4.0+7               # set version and build number
-bumpv -B                    # 1.2.1+1 -> 1.2.1+2, build number only
+bumpv --bump-build          # 1.2.1+1 -> 1.2.1+2, build number only
+bumpv -B                    # the same, short form
 bumpv --current             # print the current version: 1.2.1+1
 ```
 
@@ -76,7 +77,8 @@ App stores reject a repeated build number, so use `--bump-build` for a release:
 ```bash
 bumpv minor --bump-build    # 1.2.1+1 -> 1.3.0+2
 bumpv minor -B              # the same, short form
-bumpv -B                    # 1.2.1+1 -> 1.2.1+2, build number only
+bumpv --bump-build          # 1.2.1+1 -> 1.2.1+2, build number only
+bumpv -B                    # the same, short form
 bumpv --build 42            # 1.2.1+1 -> 1.2.1+42, build number only
 ```
 
