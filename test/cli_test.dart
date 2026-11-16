@@ -180,6 +180,43 @@ void main() {
     expect(run(const ['--version']), 0);
   });
 
+  group('--current', () {
+    /// Runs bumpv and returns its exit code with everything it printed to
+    /// stdout.
+    ({int code, String output}) runCapturingStdout(List<String> args) {
+      final captured = _CapturedStderr();
+      final code = IOOverrides.runZoned(
+        () => run(args),
+        stdout: () => captured,
+      );
+      return (code: code, output: captured.text);
+    }
+
+    test('prints the project version and changes nothing', () {
+      final root = makeProject();
+      final result = runCapturingStdout(['--current', '--project', root.path]);
+
+      expect(result.code, 0);
+      expect(result.output, '1.2.1+1\n');
+      expect(pubspecOf(root), _pubspec);
+    });
+
+    test('ignores a bump type rather than applying it', () {
+      final root = makeProject();
+      final result =
+          runCapturingStdout(['minor', '--current', '--project', root.path]);
+
+      expect(result.code, 0);
+      expect(result.output, '1.2.1+1\n');
+      expect(pubspecOf(root), _pubspec);
+    });
+
+    test('fails cleanly outside a Dart project', () {
+      final empty = Directory('${temp.path}/empty')..createSync();
+      expect(run(['--current', '--project', empty.path]), 1);
+    });
+  });
+
   test('running outside a Dart project fails cleanly', () {
     final empty = Directory('${temp.path}/empty')..createSync();
     expect(run(['minor', '--project', empty.path]), 1);
@@ -210,6 +247,28 @@ void main() {
 
       expect(pubspecOf(root), contains('version: 1.3.0+2'));
       expect(pbxprojOf(root), contains('CURRENT_PROJECT_VERSION = 2;'));
+    });
+
+    test('--bump-build alone advances only the build number', () {
+      final root = makeProject();
+      expect(run(['--bump-build', '--project', root.path]), 0);
+
+      expect(pubspecOf(root), contains('version: 1.2.1+2'));
+      expect(pbxprojOf(root), contains('FLUTTER_BUILD_NAME = 1.2.1;'));
+      expect(pbxprojOf(root), contains('FLUTTER_BUILD_NUMBER = 2;'));
+      expect(pbxprojOf(root), contains('CURRENT_PROJECT_VERSION = 2;'));
+    });
+
+    test('-B alone advances only the build number', () {
+      final root = makeProject();
+      expect(run(['-B', '--project', root.path]), 0);
+      expect(pubspecOf(root), contains('version: 1.2.1+2'));
+    });
+
+    test('--build alone sets only the build number', () {
+      final root = makeProject();
+      expect(run(['-b', '9', '--project', root.path]), 0);
+      expect(pubspecOf(root), contains('version: 1.2.1+9'));
     });
 
     test('-b still sets the build number it is given', () {
@@ -284,12 +343,23 @@ void main() {
 
       expect(
         gitOutput(root, ['log', '-1', '--pretty=%s']),
-        'chore: bump version to 1.3.0',
+        'chore: bump version to 1.3.0+1',
       );
       expect(gitOutput(root, ['status', '--porcelain']), isEmpty);
       expect(
         gitOutput(root, ['show', '--name-only', '--pretty=', 'HEAD']),
         allOf(contains('pubspec.yaml'), contains('project.pbxproj')),
+      );
+    });
+
+    test('a build-only bump names the new build number', () {
+      final root = makeProject();
+      initRepo(root);
+
+      expect(run(['-B', '-c', '--project', root.path]), 0);
+      expect(
+        gitOutput(root, ['log', '-1', '--pretty=%s']),
+        'chore: bump version to 1.2.1+2',
       );
     });
 
@@ -300,7 +370,7 @@ void main() {
       expect(run(['patch', '-c', '--project', root.path]), 0);
       expect(
         gitOutput(root, ['log', '-1', '--pretty=%s']),
-        'chore: bump version to 1.2.2',
+        'chore: bump version to 1.2.2+1',
       );
     });
 
@@ -412,7 +482,7 @@ void main() {
 
       expect(
         gitOutput(root, ['log', '-1', '--pretty=%s']),
-        'chore: bump version to 1.3.0',
+        'chore: bump version to 1.3.0+1',
       );
       expect(commitOf(root, '1.3.0'), gitOutput(root, ['rev-parse', 'HEAD']));
       expect(gitOutput(root, ['status', '--porcelain']), isEmpty);
@@ -474,7 +544,7 @@ void main() {
       expect(pubspecOf(root), contains('version: 1.3.0+1'));
       expect(
         gitOutput(root, ['log', '-1', '--pretty=%s']),
-        'chore: bump version to 1.3.0',
+        'chore: bump version to 1.3.0+1',
       );
     });
   });
@@ -539,7 +609,7 @@ void main() {
 
       expect(
         gitOutput(root, ['log', '-1', '--pretty=%s']),
-        'chore: bump version to 1.3.0',
+        'chore: bump version to 1.3.0+1',
       );
       expect(
         gitOutput(root, ['rev-parse', 'v1.3.0^{commit}']),

@@ -1,3 +1,15 @@
+## Unreleased
+
+- `bumpv --bump-build` (or `bumpv -B`) with no bump type adds one to the build
+  number and leaves `X.Y.Z` alone: `1.2.1+1` becomes `1.2.1+2`. `--build N`
+  alone sets the build number the same way. Before, both stopped with
+  "missing bump type or version".
+- `--current` prints the project's version (`1.2.1+1`) and exits, so a script
+  can read it with `VERSION=$(bumpv --current)`.
+- The `--commit` message carries the build number:
+  `chore: bump version to X.Y.Z+BUILD`. A build-only bump would otherwise have
+  committed a message naming the version it started from.
+
 ## 1.4.0
 
 - `-B` is the short form of `--bump-build`, so a store upload is
